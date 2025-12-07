@@ -1,0 +1,70 @@
+name: Build WebGL
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-webgl:
+    name: Build Unity WebGL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Unity version
+        id: unity
+        shell: bash
+        run: |
+          VERSION="$(grep -m 1 'm_EditorVersion:' ProjectSettings/ProjectVersion.txt | sed 's/m_EditorVersion: //')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected Unity version: $VERSION"
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-WebGL-${{ runner.os }}-${{ steps.unity.outputs.version }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-WebGL-${{ runner.os }}-${{ steps.unity.outputs.version }}-
+            Library-WebGL-${{ runner.os }}-
+            Library-WebGL-
+
+      - name: Build (WebGL)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          # The builder auto-detects projectPath '.'; set explicitly for clarity
+          projectPath: .
+          unityVersion: ${{ steps.unity.outputs.version }}
+          targetPlatform: WebGL
+          # Optional: customize build name/output folder
+          buildName: Tiny3D
+          buildsPath: build
+
+      - name: Upload WebGL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebGLBuild
+          path: build/WebGL
+          if-no-files-found: error
+
+      # Notes:
+      # - You must provide a Unity license via repository secret UNITY_LICENSE.
+      #   See: https://game.ci/docs/github/activation
+      # - The Unity version is read from ProjectSettings/ProjectVersion.txt (2020.1.17f1 for this repo).
+      # - The built WebGL content will be uploaded as a workflow artifact.
+
+
